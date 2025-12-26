@@ -1,0 +1,31 @@
+# Environment variables (CRITICAL - has API keys!)
+.env
+
+# Firebase credentials (CRITICAL - has private keys!)
+firebase-key.json
+firebase-key.json.Zone.Identifier
+
+# Zone Identifier files (Windows security tags)
+*.Zone.Identifier
+eye.png.Zone.Identifier
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+
+
+
+# Test images (optional, but good practice)
+test_images/
+
+# IDE files
+.vscode/
+*.swp
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log

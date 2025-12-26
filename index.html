@@ -1,0 +1,564 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>RetinalInsight Pro | Advanced AI Master Suite</title>
+
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
+  <script src='https://cdn.jsdelivr.net/npm/fullcalendar@6.1.10/index.global.min.js'></script>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+
+  <style>
+    :root {
+      --bg: #020617;
+      --glass: rgba(15, 23, 42, 0.75);
+      --border: rgba(255, 255, 255, 0.08);
+      --accent: #3b82f6;
+    }
+
+    body {
+      font-family: 'Plus Jakarta Sans', sans-serif;
+      background-color: var(--bg);
+      background-image: 
+        radial-gradient(at 0% 0%, rgba(59, 130, 246, 0.15) 0px, transparent 50%),
+        radial-gradient(at 100% 100%, rgba(147, 51, 234, 0.12) 0px, transparent 50%);
+      color: #f8fafc;
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    /* PREMIUM PANEL ENGINE */
+    .premium-panel {
+      background: var(--glass);
+      backdrop-filter: blur(24px) saturate(180%);
+      border: 1px solid var(--border);
+      transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+      position: relative;
+      overflow: hidden;
+    }
+    .premium-panel:hover { border-color: rgba(59, 130, 246, 0.4); transform: translateY(-2px); }
+
+    /* FLUID TYPOGRAPHY */
+    .val-display { font-size: clamp(1.4rem, 2.8vw, 3.2rem); font-weight: 800; font-style: italic; line-height: 1.1; }
+    .label-display { font-size: clamp(0.6rem, 0.75vw, 0.75rem); text-transform: uppercase; font-weight: 900; color: #64748b; letter-spacing: 0.15em; margin-bottom: 0.5rem; }
+
+    /* SIDEBAR ANIMATION */
+    #sidebar { transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1); width: 20rem; z-index: 150; }
+    .collapsed-sidebar { transform: translateX(-100%); width: 0 !important; padding: 0 !important; opacity: 0; pointer-events: none; }
+
+    /* VIEW ENGINE */
+    .view-section { display: none; width: 100%; height: 100%; opacity: 0; transform: translateY(15px); }
+    .active-view { display: flex !important; animation: viewEnter 0.6s cubic-bezier(0.22, 1, 0.36, 1) forwards; }
+    @keyframes viewEnter { to { opacity: 1; transform: translateY(0); } }
+
+    .nav-active { background: linear-gradient(90deg, rgba(59, 130, 246, 0.1) 0%, transparent 100%); border-right: 4px solid var(--accent); color: var(--accent) !important; }
+
+    /* CALENDAR THEME */
+    #calendar { height: 100%; border: none !important; color: #cbd5e1; }
+    .fc-theme-standard td, .fc-theme-standard th { border: 1px solid rgba(255,255,255,0.05) !important; }
+    .fc-daygrid-day-number { color: #94a3b8 !important; font-weight: 800; padding: 12px !important; }
+    .fc-button-primary { background: #1e293b !important; border: 1px solid var(--border) !important; text-transform: uppercase !important; font-size: 0.65rem !important; font-weight: 800 !important; }
+
+    .custom-scroll::-webkit-scrollbar { width: 5px; }
+    .custom-scroll::-webkit-scrollbar-thumb { background: #334155; border-radius: 10px; }
+  </style>
+</head>
+<body class="flex flex-col lg:flex-row h-screen">
+
+<div id="authOverlay" class="fixed inset-0 bg-[#020617] z-[400] flex items-center justify-center p-6">
+  <div class="premium-panel p-10 w-full max-w-md rounded-[3.5rem] text-center border-t-4 border-blue-500 shadow-2xl">
+    <div class="inline-flex p-5 bg-blue-500/10 rounded-3xl mb-8"><i data-lucide="shield-check" class="text-blue-500 w-12 h-12"></i></div>
+    <h2 class="text-3xl font-black mb-10 tracking-tight uppercase italic">Clinician Portal</h2>
+    <input type="email" id="loginEmail" placeholder="doctor@clinical.ai" class="w-full bg-slate-900 border border-slate-800 p-5 rounded-2xl text-white outline-none focus:border-blue-500 mb-4 shadow-inner transition">
+    <input type="password" id="loginPass" placeholder="••••••••" class="w-full bg-slate-900 border border-slate-800 p-5 rounded-2xl text-white outline-none focus:border-blue-500 mb-8 shadow-inner transition">
+    <button onclick="handleLogin()" class="w-full bg-blue-600 hover:bg-blue-500 py-5 rounded-2xl font-black shadow-xl transition tracking-widest uppercase">Authorize Access</button>
+  </div>
+</div>
+
+<div id="taskModal" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-[300] hidden items-center justify-center p-6">
+  <div class="premium-panel p-8 w-full max-w-md rounded-[3rem] border-t-4 border-blue-500">
+    <h2 class="text-2xl font-black mb-6 uppercase text-blue-400 italic">Schedule Task</h2>
+    <div class="space-y-4 mb-8">
+      <input type="text" id="taskTitle" placeholder="Surgery / Patient Identity" class="w-full bg-slate-900 border border-slate-800 p-4 rounded-2xl text-white outline-none focus:border-blue-500">
+      <input type="date" id="taskDate" class="w-full bg-slate-900 border border-slate-800 p-4 rounded-2xl text-white outline-none focus:border-blue-500">
+      <select id="taskType" class="w-full bg-slate-900 border border-slate-800 p-4 rounded-2xl text-white outline-none">
+        <option value="#ef4444">Urgent Surgery</option>
+        <option value="#3b82f6">Post-Op Check</option>
+      </select>
+    </div>
+    <div class="flex gap-4">
+      <button onclick="closeTaskModal()" class="flex-1 py-4 font-bold text-slate-500">Cancel</button>
+      <button onclick="saveTask()" class="flex-1 bg-blue-600 py-4 rounded-2xl font-black uppercase text-xs shadow-xl active:scale-95 transition">Deploy Task</button>
+    </div>
+  </div>
+</div>
+
+<aside id="sidebar" class="fixed lg:static h-full border-r border-white/5 flex flex-col p-8 bg-slate-950/40 backdrop-blur-3xl">
+  <div class="flex items-center justify-between gap-4 mb-16">
+    <div class="flex items-center gap-4">
+      <div class="bg-blue-600 p-2.5 rounded-2xl shadow-lg"><i data-lucide="eye" class="text-white w-6 h-6"></i></div>
+      <h1 class="text-2xl font-black tracking-tighter uppercase italic">Retinal<span class="text-blue-500">Pro</span></h1>
+    </div>
+    <button onclick="toggleSidebar()" class="p-2 hover:bg-white/5 rounded-xl transition text-slate-400">
+      <i data-lucide="menu" class="w-6 h-6"></i>
+    </button>
+  </div>
+  
+  <nav class="flex-1 space-y-4">
+    <button onclick="showView('home', this)" class="nav-btn nav-active flex items-center gap-4 w-full px-6 py-4 rounded-2xl font-bold text-slate-400 hover:text-white transition">
+      <i data-lucide="layout-grid"></i> <span>Dashboard</span>
+    </button>
+    <button onclick="showView('scan', this)" class="nav-btn flex items-center gap-4 w-full px-6 py-4 rounded-2xl font-bold text-slate-400 hover:text-white transition">
+      <i data-lucide="scan-eye"></i> <span>Scan Engine</span>
+    </button>
+    <button onclick="showView('calendar', this)" class="nav-btn flex items-center gap-4 w-full px-6 py-4 rounded-2xl font-bold text-slate-400 hover:text-white transition">
+      <i data-lucide="calendar-range"></i> <span>Planner Hub</span>
+    </button>
+    <button onclick="showView('records', this)" class="nav-btn flex items-center gap-4 w-full px-6 py-4 rounded-2xl font-bold text-slate-400 hover:text-white transition">
+      <i data-lucide="folder-search"></i> <span>Registry</span>
+    </button>
+  </nav>
+
+  <button onclick="handleLogout()" class="mt-auto flex items-center gap-3 px-6 py-4 text-red-400 font-black text-xs uppercase hover:bg-red-500/10 rounded-2xl transition border border-red-500/20">
+    <i data-lucide="log-out" class="w-4 h-4"></i> Sign Out
+  </button>
+</aside>
+
+<main class="flex-1 flex flex-col h-full overflow-hidden relative">
+  <button id="floatingToggle" onclick="toggleSidebar()" class="fixed top-24 left-6 z-[110] bg-blue-600 p-3 rounded-2xl shadow-xl shadow-blue-900/40 hidden">
+    <i data-lucide="menu" class="text-white w-6 h-6"></i>
+  </button>
+
+  <header class="h-24 flex-shrink-0 flex items-center justify-between px-10 border-b border-white/5 bg-slate-950/20 backdrop-blur-xl">
+    <div class="flex items-center gap-6 ml-auto">
+      <div class="text-right">
+        <p class="text-[9px] font-black text-slate-500 uppercase tracking-widest">Active Identity</p>
+        <p id="clinicianName" class="text-sm font-black text-blue-500 italic uppercase tracking-tighter">Connecting...</p>
+      </div>
+      <div class="w-12 h-12 rounded-2xl bg-slate-800 border border-white/10 flex items-center justify-center shadow-lg"><i data-lucide="user" class="text-slate-400 w-5 h-5"></i></div>
+    </div>
+  </header>
+
+  <div class="main-content-scroll flex-1 overflow-y-auto custom-scroll p-6 md:p-10 h-full">
+
+    <section id="view-home" class="view-section active-view flex-col space-y-12">
+      <header><h2 class="text-5xl md:text-6xl font-black tracking-tighter italic mb-4 uppercase">Clinical Hub</h2></header>
+      
+      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <div class="premium-panel p-8 rounded-[2.5rem] border-b-4 border-blue-600">
+          <p class="label-display">Inferences</p>
+          <h3 class="val-display">1,482</h3>
+        </div>
+        <div class="premium-panel p-8 rounded-[2.5rem] border-b-4 border-emerald-500">
+          <p class="label-display">Accuracy</p>
+          <h3 class="val-display text-emerald-400">~95.6%</h3>
+        </div>
+        <div class="premium-panel p-8 rounded-[2.5rem] border-b-4 border-purple-500">
+          <p class="label-display">Latency</p>
+          <h3 class="val-display text-purple-400">12ms</h3>
+        </div>
+        <div class="premium-panel p-8 rounded-[2.5rem] border-b-4 border-red-500">
+          <p class="label-display">Procedures</p>
+          <h3 id="surgeryCount" class="val-display text-red-500">0</h3>
+        </div>
+      </div>
+      <div class="grid grid-cols-1 lg:grid-cols-3 gap-8 mt-12">
+    <div class="lg:col-span-2 premium-panel p-10 rounded-[3rem] border border-white/5 bg-slate-950/20">
+        <h3 class="text-[10px] font-black uppercase text-blue-500 tracking-[0.3em] mb-8 flex items-center gap-2">
+            <i data-lucide="activity"></i> Neural Engine Pulse
+        </h3>
+        <div class="space-y-6">
+            <div class="flex justify-between items-center">
+                <span class="text-xs font-bold text-slate-400 uppercase italic">Model Quantization Sync</span>
+                <span class="text-xs font-black text-emerald-500 uppercase italic">Optimized (99%)</span>
+            </div>
+            <div class="w-full bg-slate-900 h-1.5 rounded-full overflow-hidden">
+                <div class="bg-emerald-500 h-full w-[99%] shadow-[0_0_10px_#10b981]"></div>
+            </div>
+            <div class="flex justify-between items-center">
+                <span class="text-xs font-bold text-slate-400 uppercase italic">Registry Node Throughput</span>
+                <span class="text-xs font-black text-blue-500 uppercase italic">Stable</span>
+            </div>
+            <div class="w-full bg-slate-900 h-1.5 rounded-full overflow-hidden">
+                <div class="bg-blue-500 h-full w-[85%] shadow-[0_0_10px_#3b82f6]"></div>
+            </div>
+        </div>
+    </div>
+
+    <div class="premium-panel p-10 rounded-[3rem] border border-white/5 bg-blue-600/5 flex flex-col justify-center text-center">
+        <i data-lucide="zap" class="w-12 h-12 mx-auto mb-4 text-blue-500"></i>
+        <h4 class="text-lg font-black uppercase italic tracking-tighter">Emergency Scan</h4>
+        <p class="text-[10px] text-slate-500 font-bold mb-6">Bypass registry for immediate triage</p>
+        <button onclick="showView('scan')" class="w-full bg-blue-600 py-4 rounded-2xl font-black uppercase text-[10px] tracking-widest shadow-xl">Activate Probe</button>
+    </div>
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-8 mt-4 flex-1">
+    <div class="lg:col-span-2 premium-panel p-8 rounded-[3rem] border border-white/5 bg-slate-950/20 flex flex-col">
+        <div class="flex justify-between items-center mb-8">
+            <h3 class="text-[10px] font-black uppercase text-blue-500 tracking-[0.3em] flex items-center gap-2">
+                <i data-lucide="terminal"></i> System Kernel Logs
+            </h3>
+            <span class="text-[9px] font-bold text-emerald-500 animate-pulse">● SECURE SYNC ACTIVE</span>
+        </div>
+        
+        <div class="space-y-4 overflow-y-auto custom-scroll pr-2 flex-1 font-mono text-[10px]">
+            <div class="flex gap-4 text-slate-500"><span class="text-blue-500">[09:24:12]</span> <span>Identity verify: Clinician node authorized.</span></div>
+            <div class="flex gap-4 text-slate-500"><span class="text-blue-500">[10:05:44]</span> <span>Database link: Registry node sync complete (100%).</span></div>
+            <div class="flex gap-4 text-slate-500"><span class="text-blue-500">[12:15:02]</span> <span>Inference Engine: Weights stabilized at 95.6% accuracy.</span></div>
+            <div class="flex gap-4 text-slate-300 italic"><span class="text-purple-500">>></span> <span>Awaiting next neural OCT injection...</span></div>
+        </div>
+    </div>
+
+        
+</div>
+</div>
+    
+    </section>
+
+    <section id="view-scan" class="view-section flex-col space-y-10">
+      <h2 class="text-5xl font-black tracking-tighter italic uppercase">Scan Engine</h2>
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-10">
+        <div class="lg:col-span-4 space-y-8 h-fit">
+          <div class="premium-panel flex-col p-8 rounded-[3rem] space-y-6">
+            <input type="text" id="p_name" placeholder="Patient Identity" class="w-full bg-slate-900 border border-white/5 p-5 rounded-2xl text-white outline-none focus:border-blue-500 text-sm shadow-inner transition">
+            <input type="text" id="p_id" placeholder="Protocol MRN" class="w-full bg-slate-900 border border-white/5 p-5 rounded-2xl text-white outline-none focus:border-blue-500 text-sm shadow-inner transition">
+            <input type="email" id="p_email" placeholder="Patient Email Address" class="w-full bg-slate-900 border border-white/5 p-5 rounded-2xl text-white outline-none focus:border-blue-500 text-sm shadow-inner transition">
+          </div>
+          <div class="premium-panel flex-col p-10 rounded-[3rem] text-center border-t-4 border-slate-700">
+            <div id="dropZone" class="border-2 border-dashed border-slate-700 rounded-[2.5rem] p-12 hover:border-blue-500 hover:bg-blue-500/5 cursor-pointer transition group">
+              <i data-lucide="image-plus" class="w-14 h-14 text-slate-700 mx-auto mb-4 group-hover:text-blue-500 transition group-hover:scale-110"></i>
+              <p class="text-[10px] font-black uppercase text-slate-500 tracking-widest italic">Inject Neural OCT Scan</p>
+              <input type="file" id="fileInput" class="hidden" accept="image/*">
+            </div>
+            <div id="previewBox" class="hidden mt-8 animate-in zoom-in">
+              <img id="imgPreview" class="rounded-[2.5rem] w-full mb-8 max-h-56 object-cover border border-white/10 shadow-2xl">
+              <button id="analyzeBtn" class="w-full bg-blue-600 hover:bg-blue-500 py-6 rounded-2xl font-black transition uppercase text-xs tracking-widest">Run Neural Inference</button>
+            </div>
+          </div>
+        </div>
+        <div class="lg:col-span-8 flex flex-col space-y-8 h-full">
+          <div id="resultHeader" class="hidden grid grid-cols-2 gap-8">
+            <div class="premium-panel p-8 rounded-[3rem] border-l-[14px] border-blue-600 shadow-blue-900/10"><p class="text-[10px] font-black text-slate-500 uppercase tracking-widest">Diagnosis</p><h2 id="diagVal" class="text-5xl font-black italic tracking-tighter uppercase text-white">---</h2></div>
+            <div class="premium-panel p-8 rounded-[3rem] border-l-[14px] border-emerald-500 shadow-emerald-900/10"><p class="text-[10px] font-black text-slate-500 uppercase tracking-widest">Confidence</p><h2 id="confVal" class="text-5xl font-black italic tracking-tighter text-white">--%</h2></div>
+          </div>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-8 h-auto md:h-[550px]">
+            <div class="premium-panel p-10 rounded-[3.5rem] flex flex-col border-t-4 border-blue-500/10 h-full overflow-hidden">
+              <h3 class="font-black uppercase text-[10px] text-blue-500 mb-8 tracking-[0.3em] flex gap-3"><i data-lucide="text-quote" class="w-4 h-4"></i> Interpretation</h3>
+              <div id="reportArea" class="text-slate-300 text-sm md:text-base leading-relaxed overflow-y-auto flex-1 custom-scroll pr-4 italic font-medium">Awaiting multimodal interpretation...</div>
+            </div>
+            <div class="premium-panel p-10 rounded-[3.5rem] flex flex-col border-t-4 border-purple-500/10 h-full overflow-hidden">
+              <h3 class="font-black uppercase text-[10px] text-purple-500 mb-8 tracking-[0.3em] flex gap-3"><i data-lucide="sparkles" class="w-4 h-4"></i> Assistant Hub</h3>
+              <div id="chatBox" class="flex-1 overflow-y-auto space-y-6 mb-8 pr-4 custom-scroll text-xs"></div>
+              <div class="relative">
+                <input type="text" id="chatInput" placeholder="Clinical inquiry..." class="w-full pl-6 pr-16 py-5 rounded-2xl bg-black/40 border border-white/5 outline-none focus:ring-4 ring-purple-500/10 text-sm shadow-inner transition">
+                <button id="sendChat" class="absolute right-3 top-2.5 bg-purple-600 p-3 rounded-xl hover:bg-purple-500 transition shadow-xl"><i data-lucide="send-horizontal" class="w-5 h-5"></i></button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="view-records" class="view-section flex-col h-full space-y-6 pb-12">
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+    <div class="premium-panel p-6 rounded-3xl border-l-4 border-blue-500 bg-blue-500/5">
+        <p class="text-[9px] font-black text-slate-500 uppercase tracking-widest">Pending Follow-ups</p>
+        <h4 class="text-2xl font-black italic text-white" id="pendingFollowups">0</h4>
+    </div>
+    <div class="premium-panel p-6 rounded-3xl border-l-4 border-emerald-500 bg-emerald-500/5">
+        <p class="text-[9px] font-black text-slate-500 uppercase tracking-widest">Messages Dispatched</p>
+        <h4 class="text-2xl font-black italic text-white" id="messagesSent">0</h4>
+    </div>
+    <div class="premium-panel p-6 rounded-3xl border-l-4 border-purple-500 bg-purple-500/5 flex items-center justify-center">
+        <button class="text-[10px] font-black uppercase text-purple-400 tracking-widest flex items-center gap-2 hover:text-purple-300 transition">
+            <i data-lucide="mail-plus"></i> Configure SMS Gateway
+        </button>
+    </div>
+</div>
+      <div class="flex justify-between items-center gap-4">
+        <h2 class="text-6xl font-black tracking-tighter italic uppercase text-white">Registry Node</h2>
+        <div class="relative w-72 md:w-96 group">
+          <i data-lucide="search" class="absolute left-5 top-1/2 -translate-y-1/2 text-slate-500 w-4 h-4 group-focus-within:text-blue-500 transition"></i>
+          <input type="text" id="registrySearch" oninput="handleSearch()" placeholder="Search Patient Identity..." class="w-full bg-slate-900 border border-white/5 pl-12 pr-6 py-4 rounded-2xl text-white outline-none focus:border-blue-500 shadow-inner transition text-xs">
+        </div>
+      </div>
+      <div class="premium-panel flex-col rounded-[4rem] overflow-hidden flex-1 bg-slate-950/40 border border-white/5">
+        <div class="overflow-x-auto custom-scroll h-full">
+          <table class="w-full text-left border-collapse">
+            <thead>
+              <tr class="bg-white/5 uppercase text-[10px] font-black tracking-[0.4em] text-slate-500">
+                <th class="p-10">Protocol ID</th>
+                <th class="p-10 text-center">Patient Identity</th> <th class="p-10 text-center">Finding Class</th>
+                <th class="p-10 text-right pr-12">Node Sync</th>
+              </tr>
+            </thead>
+            <tbody id="recordsTable" class="font-bold text-sm divide-y divide-white/5 text-slate-300"></tbody>
+          </table>
+        </div>
+      </div>
+      <button onclick="exportRegistryCSV()" class="bg-blue-600/10 hover:bg-blue-600/20 text-blue-500 border border-blue-500/20 px-6 py-3 rounded-2xl font-black text-[10px] uppercase tracking-widest transition flex items-center gap-2">
+        <i data-lucide="download" class="w-4 h-4"></i> Export Dataset
+      </button>
+    </section>
+
+    <section id="view-calendar" class="view-section flex-col h-full pb-10">
+      <div class="flex justify-between items-end mb-12">
+        <div><h2 class="text-6xl font-black tracking-tighter italic uppercase text-white">Planner Hub</h2><p class="text-slate-500 italic font-medium">Theatre orchestration node.</p></div>
+        <button onclick="openTaskModal()" class="bg-blue-600 hover:bg-blue-500 px-10 py-5 rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-2xl transition shadow-blue-900/40 active:scale-95 flex items-center gap-3">
+          <i data-lucide="plus-circle" class="w-4 h-4"></i> New Schedule
+        </button>
+      </div>
+      <div class="premium-panel p-6 md:p-10 rounded-[4rem] flex-1 min-h-[650px] bg-slate-950/20"><div id='calendar'></div></div>
+    </section>
+
+  </div>
+</main>
+
+<script>
+
+    
+    
+  // FIREBASE CONFIG
+  const firebaseConfig = {
+  apiKey: "AIzaSyC8mRZ6EuiL4qQFAMRwDKaEXEuoTqXVA8U",
+  authDomain: "retinal-pro.firebaseapp.com",
+  projectId: "retinal-pro",
+  storageBucket: "retinal-pro.firebasestorage.app",
+  messagingSenderId: "1037157879098",
+  appId: "1:1037157879098:web:89ce40b73e2f3a48635403",
+  measurementId: "G-BFBR44KPWS"
+};
+  firebase.initializeApp(firebaseConfig);
+  lucide.createIcons();
+  let calendarEngine, activeImageFile = null, allRecords = [];
+
+  function toggleSidebar() {
+    const sidebar = document.getElementById('sidebar');
+    const floatBtn = document.getElementById('floatingToggle');
+    sidebar.classList.toggle('collapsed-sidebar');
+    floatBtn.classList.toggle('hidden');
+    setTimeout(() => { if(calendarEngine) calendarEngine.updateSize(); }, 500);
+  }
+
+  function saveTask() {
+    const title = document.getElementById('taskTitle').value, date = document.getElementById('taskDate').value, color = document.getElementById('taskType').value;
+    if(title && date) {
+      const newEvent = { title, start: date, color };
+      calendarEngine.addEvent(newEvent);
+      let savedEvents = JSON.parse(localStorage.getItem('clinicalTasks')) || [];
+      savedEvents.push(newEvent);
+      localStorage.setItem('clinicalTasks', JSON.stringify(savedEvents));
+      updateSurgeryCount();
+      closeTaskModal();
+    }
+  }
+
+  document.addEventListener('DOMContentLoaded', () => {
+    const persistentEvents = JSON.parse(localStorage.getItem('clinicalTasks')) || [
+      { title: 'Urgent CNV Laser Surgery', start: '2025-12-24T09:00:00', color: '#ef4444' }
+    ];
+    calendarEngine = new FullCalendar.Calendar(document.getElementById('calendar'), {
+      initialView: window.innerWidth < 768 ? 'listWeek' : 'dayGridMonth',
+      events: persistentEvents
+    });
+    calendarEngine.render();
+    document.getElementById('sendChat').onclick = handleChatSubmit;
+    document.getElementById('chatInput').onkeypress = (e) => { if(e.key === 'Enter') handleChatSubmit(); };
+  });
+
+  async function handleLogin() {
+    const email = document.getElementById('loginEmail').value, pass = document.getElementById('loginPass').value;
+    try {
+      const userCredential = await firebase.auth().signInWithEmailAndPassword(email, pass);
+      sessionStorage.setItem('authToken', await userCredential.user.getIdToken());
+      document.getElementById('clinicianName').innerText = userCredential.user.email.toUpperCase();
+      document.getElementById('authOverlay').style.display = 'none';
+      fetchRecords(); 
+    } catch (e) { alert("AUTHENTICATION DECRYPT ERROR: " + e.message); }
+  }
+
+  function handleLogout() { sessionStorage.removeItem('authToken'); location.reload(); }
+
+  const fileInput = document.getElementById('fileInput');
+  document.getElementById('dropZone').onclick = () => fileInput.click();
+  fileInput.onchange = (e) => {
+    if (e.target.files[0]) {
+      activeImageFile = e.target.files[0];
+      document.getElementById('imgPreview').src = URL.createObjectURL(activeImageFile);
+      document.getElementById('previewBox').classList.remove('hidden');
+      document.getElementById('dropZone').classList.add('hidden');
+    }
+  };
+
+  document.getElementById('analyzeBtn').onclick = async () => {
+    const btn = document.getElementById('analyzeBtn'), token = sessionStorage.getItem('authToken');
+    if(!activeImageFile) return alert("Neural Data Input Required.");
+    btn.innerHTML = `<span class="animate-pulse italic">Neural Syncing...</span>`; btn.disabled = true;
+    const fd = new FormData();
+    fd.append('image', activeImageFile);
+    fd.append('patientName', document.getElementById('p_name').value);
+    fd.append('patientId', document.getElementById('p_id').value);
+    fd.append('patientEmail', document.getElementById('p_email').value);
+    try {
+      const res = await fetch('http://127.0.0.1:5000/predict', { 
+        method: 'POST', headers: { 'Authorization': `Bearer ${token}` }, body: fd 
+      });
+      const data = await res.json();
+      document.getElementById('resultHeader').classList.remove('hidden');
+      document.getElementById('diagVal').innerText = data.label;
+      document.getElementById('confVal').innerText = data.confidence;
+      const pts = data.report.split('.').filter(p => p.trim().length > 5);
+      document.getElementById('reportArea').innerHTML = `<ul class="space-y-6">${pts.map(p => `<li class="flex gap-4 group"><span class="w-1.5 h-1.5 rounded-full bg-blue-500 mt-2.5 shadow-[0_0_8px_#3b82f6]"></span><span class="text-slate-200 transition italic">${p.trim()}.</span></li>`).join('')}</ul>`;
+      btn.innerText = "INFERENCE COMPLETE";
+      fetchRecords(); 
+    } catch (err) { btn.innerText = "OFFLINE"; } finally { btn.disabled = false; }
+  };
+
+  async function handleChatSubmit() {
+    const input = document.getElementById('chatInput'), box = document.getElementById('chatBox'), token = sessionStorage.getItem('authToken');
+    if(!input.value.trim()) return;
+    box.innerHTML += `<div class="ml-auto bg-purple-600/20 border border-purple-500/20 px-6 py-4 rounded-3xl rounded-tr-none text-xs max-w-[85%] font-bold text-purple-100 shadow-2xl">${input.value}</div>`;
+    const msg = input.value; input.value = ''; box.scrollTop = box.scrollHeight;
+    try {
+      const res = await fetch('http://127.0.0.1:5000/chat', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }, body: JSON.stringify({ message: msg, context: 'Retinal Disease Telemetry' }) });
+      const data = await res.json();
+      box.innerHTML += `<div class="bg-slate-800/80 px-6 py-4 rounded-3xl rounded-tl-none text-xs max-w-[90%] text-slate-300 leading-relaxed border border-white/5 shadow-2xl">${data.reply}</div>`;
+      box.scrollTop = box.scrollHeight;
+    } catch (e) { box.innerHTML += `<div class="text-red-400 text-[10px] italic">Telemetry Hub Interrupted</div>`; }
+  }
+
+  async function fetchRecords() {
+    const token = sessionStorage.getItem('authToken');
+    if(!token) return;
+    try {
+        const res = await fetch('http://127.0.0.1:5000/get_records', { 
+            headers: { 'Authorization': `Bearer ${token}` } 
+        });
+        allRecords = await res.json();
+        renderTable(allRecords);
+        updateRegistryStats(allRecords); // ADD THIS LINE
+    } catch (e) { 
+        console.error('Error fetching records:', e);
+    }
+}
+
+// ADD THIS NEW FUNCTION
+function updateRegistryStats(records) {
+    // Count pending follow-ups (HIGH/MEDIUM urgency patients not notified)
+    const pendingFollowups = records.filter(r => 
+        !r.notified && (r.urgency === 'HIGH' || r.urgency === 'MEDIUM')
+    ).length;
+    
+    // Count messages dispatched (notified patients)
+    const messagesDispatched = records.filter(r => r.notified).length;
+    
+    // Update the counters
+    document.getElementById('pendingFollowups').innerText = pendingFollowups;
+    document.getElementById('messagesSent').innerText = messagesDispatched;
+}
+
+  function renderTable(data) {
+    const table = document.getElementById('recordsTable');
+    table.innerHTML = data.map(d => `<tr class="border-t border-white/5 hover:bg-white/5 transition duration-300 group"><td class="p-10 font-mono text-blue-500 text-[10px] tracking-tighter">${d.id}</td><td class="p-10 text-white font-black italic group-hover:text-blue-400 transition text-center uppercase">${d.name || 'Anonymous Patient'}</td><td class="p-10 text-center"><span class="bg-blue-500/10 text-blue-400 px-5 py-2 rounded-full text-[10px] font-black border border-blue-500/20 uppercase tracking-widest">${d.diagnosis}</span></td><td class="p-10 text-right pr-12 text-slate-600 text-[10px] font-black uppercase italic italic">Synced</td></tr>`).join('');
+  }
+
+  function handleSearch() {
+    const query = document.getElementById('registrySearch').value.toLowerCase();
+    const filtered = allRecords.filter(r => (r.name && r.name.toLowerCase().includes(query)) || (r.id && r.id.toString().includes(query)) || (r.diagnosis && r.diagnosis.toLowerCase().includes(query)));
+    renderTable(filtered);
+  }
+
+  function showView(v, el) {
+    document.querySelectorAll('.view-section').forEach(s => { s.classList.remove('active-view'); s.style.display = 'none'; });
+    const t = document.getElementById('view-' + v);
+    if(t) { t.style.display = 'flex'; setTimeout(() => t.classList.add('active-view'), 10); }
+    document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('nav-active'));
+    if(el) el.classList.add('nav-active');
+    if(v === 'calendar') setTimeout(() => { calendarEngine.updateSize(); calendarEngine.render(); }, 150);
+    if(v === 'records' || v === 'home') fetchRecords();
+    lucide.createIcons();
+  }
+  function openTaskModal() { document.getElementById('taskModal').style.display = 'flex'; }
+  function closeTaskModal() { document.getElementById('taskModal').style.display = 'none'; }
+  function updateSurgeryCount() { document.getElementById('surgeryCount').innerText = calendarEngine.getEvents().length; }
+
+  function renderTable(data) {
+    const table = document.getElementById('recordsTable');
+    table.innerHTML = data.map(d => `
+      <tr class="border-t border-white/5 hover:bg-white/5 transition group">
+        <td class="p-10 font-mono text-blue-500 text-[10px]">${d.id}</td>
+        <td class="p-10 text-white font-black italic text-center uppercase">${d.name || 'Anonymous'}</td>
+        <td class="p-10 text-center"><span class="bg-blue-500/10 text-blue-400 px-5 py-2 rounded-full text-[10px] font-black border border-blue-500/20 uppercase">${d.diagnosis}</span></td>
+        <td class="p-10 text-right pr-12">
+            <button onclick="dispatchPatientAlert('${d.name}', '${d.diagnosis}', '${d.patient_email || ''}', '${d.id}')" class="bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-500 p-2 rounded-xl border border-emerald-500/20 transition">
+                <i data-lucide="send" class="w-4 h-4"></i>
+            </button>
+        </td>
+      </tr>`).join('');
+    lucide.createIcons();
+}
+
+// SIMULATED SMS GATEWAY
+async function dispatchPatientAlert(name, diagnosis, patientEmail, recordId) {
+    const token = sessionStorage.getItem('authToken');
+    const nextSession = "December 30, 2025";
+    
+    const emailTo = patientEmail || 'taneeshsawant05@gmail.com';
+
+    try {
+        const res = await fetch('http://127.0.0.1:5000/send_patient_email', {
+            method: 'POST',
+            headers: { 
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}` 
+            },
+            body: JSON.stringify({
+                name: name,
+                diagnosis: diagnosis,
+                next_session: nextSession,
+                email: emailTo,
+                record_id: recordId
+            })
+        });
+
+        const data = await res.json();
+        
+        if (res.ok) {
+            alert(`✅ SUCCESS: Clinical update dispatched to ${name} (${emailTo})`);
+            
+            // Refresh records to update counters
+            await fetchRecords(); // ADD THIS LINE
+        } else {
+            alert(`❌ DISPATCH ERROR: ${data.error || 'Unknown error'}`);
+        }
+    } catch (e) {
+        console.error('Dispatch error:', e);
+        alert(`❌ NETWORK ERROR: ${e.message}`);
+    }
+}
+
+  // DATA EXPORT PROTOCOL
+function exportRegistryCSV() {
+    if (allRecords.length === 0) return alert("Registry node empty.");
+    
+    const headers = ["Protocol ID", "Patient Identity", "Finding Class"];
+    const rows = allRecords.map(r => [r.id, r.name || "Anonymous", r.diagnosis]);
+    
+    let csvContent = "data:text/csv;charset=utf-8," + headers.join(",") + "\n" 
+                     + rows.map(e => e.join(",")).join("\n");
+
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    link.setAttribute("download", "clinical_registry_export.csv");
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+}
+</script>
+
+</body>
+</html>
