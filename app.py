@@ -393,6 +393,11 @@ def get_records():
         return jsonify({"error": str(e)}), 500
 
 # 7. AUTOMATED EMAIL DISPATCH
+from sendgrid import SendGridAPIClient
+from sendgrid.helpers.mail import Mail
+
+SENDGRID_API_KEY = os.environ.get("SENDGRID_API_KEY")
+
 @app.route('/send_patient_email', methods=['POST'])
 def send_patient_email():
     data = request.json
@@ -402,13 +407,8 @@ def send_patient_email():
     record_id = data.get('record_id')
     next_session = data.get('next_session', 'To be scheduled')
 
-    if not GMAIL_APP_PASSWORD:
-        return jsonify({"error": "SMTP Gateway not configured"}), 500
-
-    msg = MIMEMultipart()
-    msg['From'] = GMAIL_USER
-    msg['To'] = recipient
-    msg['Subject'] = f"RetinalPro: Clinical Update for {name}"
+    if not SENDGRID_API_KEY:
+        return jsonify({"error": "Email service not configured"}), 500
 
     body = f"""
     Dear {name},
@@ -419,33 +419,30 @@ def send_patient_email():
     NEXT SESSION: {next_session}
     STATUS: Record synchronized with Clinical Registry.
     
-    Please visit the clinic on your next scheduled follow up for a smooth experience.
+    Please visit the clinic on your next scheduled follow-up for a smooth experience.
     
     Best regards,
     RetinalPro Clinical Hub
     """
-    msg.attach(MIMEText(body, 'plain'))
+
+    message = Mail(
+        from_email='taneeshsawant05@gmail.com',  # Must be verified in SendGrid
+        to_emails=recipient,
+        subject=f'RetinalPro: Clinical Update for {name}',
+        plain_text_content=body
+    )
 
     try:
-        print(f"Attempting to send email to {recipient}...")
-        print(f"SMTP Config - User: {GMAIL_USER}, Password Set: {bool(GMAIL_APP_PASSWORD)}")
-        
-        with smtplib.SMTP_SSL('smtp.gmail.com', 465, timeout=30) as server:
-            print("Connected to SMTP server")
-            server.login(GMAIL_USER, GMAIL_APP_PASSWORD)
-            print("Login successful")
-            server.send_message(msg)
-            print("Email sent successfully")
+        sg = SendGridAPIClient(SENDGRID_API_KEY)
+        response = sg.send(message)
+        print(f"Email sent! Status: {response.status_code}")
         
         if record_id:
             db.collection("patient_records").document(record_id).update({"notified": True})
             
         return jsonify({"status": "Email Dispatched"}), 200
-    except smtplib.SMTPAuthenticationError as e:
-        print(f"SMTP Authentication Error: {e}")
-        return jsonify({"error": f"Authentication failed. Check Gmail App Password: {str(e)}"}), 500
     except Exception as e:
-        print(f"Email error: {e}")
+        print(f"SendGrid error: {e}")
         return jsonify({"error": str(e)}), 500
 
 # 8. AI CHAT ASSISTANT
