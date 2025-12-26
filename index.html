@@ -506,7 +506,16 @@ function updateRegistryStats(records) {
 // SIMULATED SMS GATEWAY
 async function dispatchPatientAlert(name, diagnosis, patientEmail, recordId) {
     const token = sessionStorage.getItem('authToken');
-    const nextSession = "January 07, 2026";
+    
+    // Smart scheduling based on diagnosis severity
+    const followUpSchedule = {
+        'CNV': 'January 5, 2026',      // High urgency - sooner
+        'DME': 'January 6, 2026',      // High urgency - sooner
+        'DRUSEN': 'January 10, 2026',  // Medium urgency
+        'NORMAL': 'January 15, 2026'   // Low urgency - later
+    };
+    
+    const nextSession = followUpSchedule[diagnosis] || 'January 8, 2026';
     
     const emailTo = patientEmail || 'taneeshsawant05@gmail.com';
 
@@ -529,10 +538,9 @@ async function dispatchPatientAlert(name, diagnosis, patientEmail, recordId) {
         const data = await res.json();
         
         if (res.ok) {
-            alert(`✅ SUCCESS: Clinical update dispatched to ${name} (${emailTo})`);
-            
-            // Refresh records to update counters
-            await fetchRecords(); // ADD THIS LINE
+            alert(`✅ SUCCESS: Clinical update dispatched to ${name} (${emailTo})
+📅 Follow-up scheduled: ${nextSession}`);
+            await fetchRecords();
         } else {
             alert(`❌ DISPATCH ERROR: ${data.error || 'Unknown error'}`);
         }
