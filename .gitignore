@@ -28,4 +28,4 @@ test_images/
 Thumbs.db
 
 # Logs
-*.log
+*.log*.Zone.Identifier
