@@ -35,7 +35,7 @@ load_dotenv()
 app = Flask(__name__)
 CORS(app, resources={
     r"/*": {
-        "origins": ["http://127.0.0.1:3000", "http://localhost:3000", "https://retinal-pro.onrender.com"],
+        "origins": ["http://127.0.0.1:3000", "http://localhost:3000", "https://retinal-pro.onrender.com", "https://retinalpro1.netlify.app"],
         "methods": ["GET", "POST", "OPTIONS"],
         "allow_headers": ["Content-Type", "Authorization"],
         "supports_credentials": True
