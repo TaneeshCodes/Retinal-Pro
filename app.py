@@ -33,7 +33,14 @@ except ImportError:
 # 1. INITIALIZATION & SECURITY
 load_dotenv()
 app = Flask(__name__)
-CORS(app, resources={r"/*": {"origins": "*"}}, supports_credentials=True)
+CORS(app, resources={
+    r"/*": {
+        "origins": ["http://127.0.0.1:3000", "http://localhost:3000", "https://retinal-pro.onrender.com"],
+        "methods": ["GET", "POST", "OPTIONS"],
+        "allow_headers": ["Content-Type", "Authorization"],
+        "supports_credentials": True
+    }
+})
 
 # API Keys and Credentials
 if GENAI_NEW:
@@ -318,7 +325,7 @@ def predict():
     try:
         if GENAI_NEW:
             response = client.models.generate_content(
-                model='gemini-2.5-flash',
+                model='gemini-2.0-flash-exp',
                 contents=prompt
             )
             report = response.text
@@ -420,15 +427,25 @@ def send_patient_email():
     msg.attach(MIMEText(body, 'plain'))
 
     try:
-        with smtplib.SMTP_SSL('smtp.gmail.com', 465) as server:
+        print(f"Attempting to send email to {recipient}...")
+        print(f"SMTP Config - User: {GMAIL_USER}, Password Set: {bool(GMAIL_APP_PASSWORD)}")
+        
+        with smtplib.SMTP_SSL('smtp.gmail.com', 465, timeout=30) as server:
+            print("Connected to SMTP server")
             server.login(GMAIL_USER, GMAIL_APP_PASSWORD)
+            print("Login successful")
             server.send_message(msg)
+            print("Email sent successfully")
         
         if record_id:
             db.collection("patient_records").document(record_id).update({"notified": True})
             
         return jsonify({"status": "Email Dispatched"}), 200
+    except smtplib.SMTPAuthenticationError as e:
+        print(f"SMTP Authentication Error: {e}")
+        return jsonify({"error": f"Authentication failed. Check Gmail App Password: {str(e)}"}), 500
     except Exception as e:
+        print(f"Email error: {e}")
         return jsonify({"error": str(e)}), 500
 
 # 8. AI CHAT ASSISTANT

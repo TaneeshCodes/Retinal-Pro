@@ -405,7 +405,7 @@
     fd.append('patientId', document.getElementById('p_id').value);
     fd.append('patientEmail', document.getElementById('p_email').value);
     try {
-      const res = await fetch('http://127.0.0.1:5000/predict', { 
+      const res = await fetch('https://retinal-pro.onrender.com/predict', { 
         method: 'POST', headers: { 'Authorization': `Bearer ${token}` }, body: fd 
       });
       const data = await res.json();
@@ -425,7 +425,7 @@
     box.innerHTML += `<div class="ml-auto bg-purple-600/20 border border-purple-500/20 px-6 py-4 rounded-3xl rounded-tr-none text-xs max-w-[85%] font-bold text-purple-100 shadow-2xl">${input.value}</div>`;
     const msg = input.value; input.value = ''; box.scrollTop = box.scrollHeight;
     try {
-      const res = await fetch('http://127.0.0.1:5000/chat', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }, body: JSON.stringify({ message: msg, context: 'Retinal Disease Telemetry' }) });
+      const res = await fetch('https://retinal-pro.onrender.com/chat', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }, body: JSON.stringify({ message: msg, context: 'Retinal Disease Telemetry' }) });
       const data = await res.json();
       box.innerHTML += `<div class="bg-slate-800/80 px-6 py-4 rounded-3xl rounded-tl-none text-xs max-w-[90%] text-slate-300 leading-relaxed border border-white/5 shadow-2xl">${data.reply}</div>`;
       box.scrollTop = box.scrollHeight;
@@ -436,7 +436,7 @@
     const token = sessionStorage.getItem('authToken');
     if(!token) return;
     try {
-        const res = await fetch('http://127.0.0.1:5000/get_records', { 
+        const res = await fetch('https://retinal-pro.onrender.com/get_records', { 
             headers: { 'Authorization': `Bearer ${token}` } 
         });
         allRecords = await res.json();
@@ -511,7 +511,7 @@ async function dispatchPatientAlert(name, diagnosis, patientEmail, recordId) {
     const emailTo = patientEmail || 'taneeshsawant05@gmail.com';
 
     try {
-        const res = await fetch('http://127.0.0.1:5000/send_patient_email', {
+        const res = await fetch('https://retinal-pro.onrender.com/send_patient_email', {
             method: 'POST',
             headers: { 
                 'Content-Type': 'application/json',
