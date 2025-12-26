@@ -148,7 +148,7 @@ node (optional, for local frontend testing)
 
 1. **Clone the repository**
 ```bash
-git clone https://github.com/YOUR_USERNAME/retinal-pro.git
+git clone https://github.com/TaneeshCodes/Retinal-Pro.git
 cd retinal-pro
 ```
 
