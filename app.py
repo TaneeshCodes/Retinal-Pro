@@ -560,7 +560,6 @@ def get_patient_progression(patient_id):
         print(f"Progression retrieval error: {e}")
         return jsonify({"error": str(e)}), 500
 
-
 def calculate_progression_metrics(progression_data):
     """
     Analyzes progression data to generate clinical insights
