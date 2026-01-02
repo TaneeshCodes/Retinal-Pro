@@ -511,6 +511,245 @@ def model_info():
             "deployment_note": "Running in edge inference mode (optimized for resource-constrained environments)",
             "inference_method": "Feature-based classification with statistical analysis"
         })
+
+    # Add these endpoints to your Flask backend (app.py)
+
+# 11. DISEASE PROGRESSION TRACKING ENDPOINTS
+
+@app.route('/progression/<patient_id>', methods=['GET'])
+def get_patient_progression(patient_id):
+    """
+    Retrieves complete scan history for disease progression analysis
+    Returns chronological record of diagnoses with confidence metrics
+    """
+    try:
+        # Query all records for this patient, ordered by timestamp
+        docs = db.collection("patient_records")\
+                 .where("patient_id", "==", patient_id)\
+                 .order_by("timestamp", direction=firestore.Query.ASCENDING)\
+                 .stream()
+        
+        progression_data = []
+        for doc in docs:
+            data = doc.to_dict()
+            progression_data.append({
+                "scan_id": doc.id,
+                "timestamp": data.get("timestamp"),
+                "diagnosis": data.get("diagnosis"),
+                "confidence": data.get("confidence"),
+                "raw_confidence": data.get("raw_confidence", 0),
+                "risk_level": data.get("risk_level"),
+                "class_probabilities": data.get("model_metadata", {}).get("class_probabilities", {}),
+                "inference_time": data.get("model_metadata", {}).get("inference_time_ms", 0)
+            })
+        
+        if not progression_data:
+            return jsonify({"error": "No progression data found for this patient"}), 404
+        
+        # Calculate progression metrics
+        metrics = calculate_progression_metrics(progression_data)
+        
+        return jsonify({
+            "patient_id": patient_id,
+            "total_scans": len(progression_data),
+            "scan_history": progression_data,
+            "progression_metrics": metrics
+        }), 200
+        
+    except Exception as e:
+        print(f"Progression retrieval error: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+def calculate_progression_metrics(progression_data):
+    """
+    Analyzes progression data to generate clinical insights
+    """
+    if len(progression_data) < 2:
+        return {
+            "trend": "INSUFFICIENT_DATA",
+            "stability": "N/A",
+            "alert_level": "MONITOR"
+        }
+    
+    # Analyze diagnosis changes
+    diagnoses = [scan["diagnosis"] for scan in progression_data]
+    unique_diagnoses = set(diagnoses)
+    
+    # Determine trend
+    if len(unique_diagnoses) == 1:
+        trend = "STABLE"
+    elif diagnoses[0] == "NORMAL" and diagnoses[-1] != "NORMAL":
+        trend = "DETERIORATING"
+    elif diagnoses[0] != "NORMAL" and diagnoses[-1] == "NORMAL":
+        trend = "IMPROVING"
+    else:
+        trend = "VARIABLE"
+    
+    # Calculate risk progression
+    risk_mapping = {"LOW": 1, "MEDIUM": 2, "HIGH": 3}
+    risk_scores = [risk_mapping.get(scan["risk_level"], 2) for scan in progression_data]
+    
+    if len(risk_scores) >= 2:
+        risk_change = risk_scores[-1] - risk_scores[0]
+        if risk_change > 0:
+            stability = "WORSENING"
+            alert_level = "URGENT" if risk_scores[-1] == 3 else "CAUTION"
+        elif risk_change < 0:
+            stability = "IMPROVING"
+            alert_level = "MONITOR"
+        else:
+            stability = "STABLE"
+            alert_level = "ROUTINE" if risk_scores[-1] == 1 else "MONITOR"
+    else:
+        stability = "STABLE"
+        alert_level = "MONITOR"
+    
+    # Calculate average confidence over time
+    avg_confidence = sum(scan.get("raw_confidence", 0) for scan in progression_data) / len(progression_data)
+    
+    return {
+        "trend": trend,
+        "stability": stability,
+        "alert_level": alert_level,
+        "average_confidence": round(avg_confidence, 2),
+        "diagnosis_changes": len(unique_diagnoses),
+        "first_diagnosis": diagnoses[0],
+        "latest_diagnosis": diagnoses[-1],
+        "scan_interval_days": calculate_scan_interval(progression_data)
+    }
+
+
+def calculate_scan_interval(progression_data):
+    """
+    Calculates average time between scans in days
+    """
+    if len(progression_data) < 2:
+        return 0
+    
+    try:
+        first_time = progression_data[0]["timestamp"]
+        last_time = progression_data[-1]["timestamp"]
+        
+        time_diff = (last_time - first_time).total_seconds() / 86400  # Convert to days
+        avg_interval = time_diff / (len(progression_data) - 1)
+        
+        return round(avg_interval, 1)
+    except:
+        return 0
+
+
+@app.route('/progression/compare/<patient_id>', methods=['POST'])
+def compare_scans(patient_id):
+    """
+    Compares two specific scans for detailed progression analysis
+    """
+    data = request.json
+    scan_id_1 = data.get('scan_id_1')
+    scan_id_2 = data.get('scan_id_2')
+    
+    if not scan_id_1 or not scan_id_2:
+        return jsonify({"error": "Two scan IDs required for comparison"}), 400
+    
+    try:
+        scan_1 = db.collection("patient_records").document(scan_id_1).get().to_dict()
+        scan_2 = db.collection("patient_records").document(scan_id_2).get().to_dict()
+        
+        if not scan_1 or not scan_2:
+            return jsonify({"error": "One or both scans not found"}), 404
+        
+        # Generate AI comparison report
+        prompt = f"""Compare these two retinal scan results for disease progression analysis:
+
+Scan 1: {scan_1.get('diagnosis')} (Confidence: {scan_1.get('confidence')})
+Scan 2: {scan_2.get('diagnosis')} (Confidence: {scan_2.get('confidence')})
+
+Provide a concise 3-point clinical comparison focusing on:
+1) Change in diagnosis severity
+2) Progression indicators
+3) Recommended action"""
+        
+        try:
+            if GENAI_NEW:
+                response = client.models.generate_content(
+                    model='gemini-2.0-flash-exp',
+                    contents=prompt
+                )
+                comparison_report = response.text
+            else:
+                comparison_report = gemini_model.generate_content(prompt).text
+        except Exception as e:
+            print(f"Gemini comparison error: {e}")
+            comparison_report = "Manual clinical review recommended for detailed progression analysis."
+        
+        return jsonify({
+            "scan_1": {
+                "id": scan_id_1,
+                "diagnosis": scan_1.get("diagnosis"),
+                "confidence": scan_1.get("confidence"),
+                "timestamp": scan_1.get("timestamp")
+            },
+            "scan_2": {
+                "id": scan_id_2,
+                "diagnosis": scan_2.get("diagnosis"),
+                "confidence": scan_2.get("confidence"),
+                "timestamp": scan_2.get("timestamp")
+            },
+            "comparison_report": comparison_report
+        }), 200
+        
+    except Exception as e:
+        print(f"Scan comparison error: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route('/progression/stats', methods=['GET'])
+def get_progression_statistics():
+    """
+    Generates system-wide progression statistics for clinical insights
+    """
+    try:
+        all_patients = {}
+        docs = db.collection("patient_records").stream()
+        
+        for doc in docs:
+            data = doc.to_dict()
+            p_id = data.get("patient_id", doc.id)
+            
+            if p_id not in all_patients:
+                all_patients[p_id] = []
+            
+            all_patients[p_id].append({
+                "diagnosis": data.get("diagnosis"),
+                "risk_level": data.get("risk_level"),
+                "timestamp": data.get("timestamp")
+            })
+        
+        # Calculate statistics
+        patients_with_progression = sum(1 for scans in all_patients.values() if len(scans) > 1)
+        total_patients = len(all_patients)
+        
+        # Count patients by current status
+        status_counts = {"IMPROVING": 0, "STABLE": 0, "DETERIORATING": 0}
+        for scans in all_patients.values():
+            if len(scans) >= 2:
+                if scans[0]["diagnosis"] != "NORMAL" and scans[-1]["diagnosis"] == "NORMAL":
+                    status_counts["IMPROVING"] += 1
+                elif scans[0]["diagnosis"] == scans[-1]["diagnosis"]:
+                    status_counts["STABLE"] += 1
+                else:
+                    status_counts["DETERIORATING"] += 1
+        
+        return jsonify({
+            "total_patients": total_patients,
+            "patients_with_progression_data": patients_with_progression,
+            "progression_tracking_rate": round((patients_with_progression / total_patients * 100), 1) if total_patients > 0 else 0,
+            "patient_status_distribution": status_counts
+        }), 200
+        
+    except Exception as e:
+        print(f"Statistics error: {e}")
+        return jsonify({"error": str(e)}), 500
     
     return jsonify(info), 200
 
