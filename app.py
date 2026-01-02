@@ -513,7 +513,9 @@ def model_info():
             "inference_method": "Feature-based classification with statistical analysis"
         })
 
-return jsonify(info), 200
+    return jsonify(info), 200  # ← ADD 4 SPACES HERE
+
+# 11. DISEASE PROGRESSION TRACKING ENDPOINTS
 
 # 11. DISEASE PROGRESSION TRACKING ENDPOINTS
 
