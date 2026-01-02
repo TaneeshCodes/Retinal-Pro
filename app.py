@@ -338,6 +338,7 @@ def predict():
     # Store in Firebase Registry
     try:
         db.collection("patient_records").document(p_id).set({
+            "patient_id": p_id,
             "patient_name": p_name,
             "patient_email": p_email,
             "diagnosis": label,
@@ -512,7 +513,7 @@ def model_info():
             "inference_method": "Feature-based classification with statistical analysis"
         })
 
-    # Add these endpoints to your Flask backend (app.py)
+return jsonify(info), 200
 
 # 11. DISEASE PROGRESSION TRACKING ENDPOINTS
 
@@ -569,7 +570,8 @@ def calculate_progression_metrics(progression_data):
         return {
             "trend": "INSUFFICIENT_DATA",
             "stability": "N/A",
-            "alert_level": "MONITOR"
+            "alert_level": "MONITOR",
+            "scan_interval_days": 0
         }
     
     # Analyze diagnosis changes
@@ -750,8 +752,6 @@ def get_progression_statistics():
     except Exception as e:
         print(f"Statistics error: {e}")
         return jsonify({"error": str(e)}), 500
-    
-    return jsonify(info), 200
 
 if __name__ == '__main__':
     app.run(port=5000, debug=True)
