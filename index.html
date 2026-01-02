@@ -123,6 +123,9 @@
     <button onclick="showView('records', this)" class="nav-btn flex items-center gap-4 w-full px-6 py-4 rounded-2xl font-bold text-slate-400 hover:text-white transition">
       <i data-lucide="folder-search"></i> <span>Registry</span>
     </button>
+    <button onclick="showView('progression', this)" class="nav-btn flex items-center gap-4 w-full px-6 py-4 rounded-2xl font-bold text-slate-400 hover:text-white transition">
+    <i data-lucide="activity"></i> <span>Progression</span>
+    </button>
   </nav>
 
   <button onclick="handleLogout()" class="mt-auto flex items-center gap-3 px-6 py-4 text-red-400 font-black text-xs uppercase hover:bg-red-500/10 rounded-2xl transition border border-red-500/20">
@@ -316,7 +319,153 @@
       <div class="premium-panel p-6 md:p-10 rounded-[4rem] flex-1 min-h-[650px] bg-slate-950/20"><div id='calendar'></div></div>
     </section>
 
+    <section id="view-progression" class="view-section flex-col h-full space-y-8 pb-12">
+    <div class="flex justify-between items-end mb-8">
+        <div>
+            <h2 class="text-6xl font-black tracking-tighter italic uppercase text-white">Progression Analytics</h2>
+            <p class="text-slate-500 italic font-medium">Longitudinal disease trajectory monitoring</p>
+        </div>
+        <button onclick="refreshProgressionStats()" class="bg-purple-600 hover:bg-purple-500 px-8 py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-2xl transition flex items-center gap-3">
+            <i data-lucide="refresh-cw" class="w-4 h-4"></i> Refresh Analytics
+        </button>
+    </div>
+
+    <!-- System-wide Statistics -->
+    <div class="grid grid-cols-1 md:grid-cols-4 gap-6">
+        <div class="premium-panel p-6 rounded-3xl border-l-4 border-blue-500 bg-blue-500/5">
+            <p class="text-[9px] font-black text-slate-500 uppercase tracking-widest">Total Patients</p>
+            <h4 class="text-3xl font-black italic text-white" id="totalPatientsCount">0</h4>
+        </div>
+        <div class="premium-panel p-6 rounded-3xl border-l-4 border-emerald-500 bg-emerald-500/5">
+            <p class="text-[9px] font-black text-slate-500 uppercase tracking-widest">Improving</p>
+            <h4 class="text-3xl font-black italic text-emerald-400" id="improvingCount">0</h4>
+        </div>
+        <div class="premium-panel p-6 rounded-3xl border-l-4 border-yellow-500 bg-yellow-500/5">
+            <p class="text-[9px] font-black text-slate-500 uppercase tracking-widest">Stable</p>
+            <h4 class="text-3xl font-black italic text-yellow-400" id="stableCount">0</h4>
+        </div>
+        <div class="premium-panel p-6 rounded-3xl border-l-4 border-red-500 bg-red-500/5">
+            <p class="text-[9px] font-black text-slate-500 uppercase tracking-widest">Deteriorating</p>
+            <h4 class="text-3xl font-black italic text-red-400" id="deterioratingCount">0</h4>
+        </div>
+    </div>
+
+    <!-- Patient Selector -->
+    <div class="premium-panel p-8 rounded-3xl border border-white/5 bg-slate-950/40">
+        <h3 class="text-[10px] font-black uppercase text-purple-500 tracking-[0.3em] mb-6 flex items-center gap-2">
+            <i data-lucide="user-search"></i> Patient Selection
+        </h3>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div class="relative">
+                <i data-lucide="search" class="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500 w-4 h-4"></i>
+                <input 
+                    type="text" 
+                    id="progressionPatientSearch" 
+                    placeholder="Search patient by ID or name..." 
+                    class="w-full bg-slate-900 border border-white/5 pl-12 pr-6 py-4 rounded-2xl text-white outline-none focus:border-purple-500 shadow-inner transition text-sm"
+                    oninput="searchProgressionPatients()"
+                >
+            </div>
+            <select 
+                id="patientProgressionSelect" 
+                onchange="loadPatientProgression()"
+                class="w-full bg-slate-900 border border-white/5 px-6 py-4 rounded-2xl text-white outline-none focus:border-purple-500 text-sm"
+            >
+                <option value="">-- Select Patient --</option>
+            </select>
+        </div>
+    </div>
+
+    <!-- Progression Timeline & Analytics -->
+    <div id="progressionContent" class="hidden space-y-8">
+        <!-- Patient Overview Card -->
+        <div class="premium-panel p-8 rounded-3xl border-t-4 border-purple-500/20 bg-gradient-to-br from-purple-500/5 to-transparent">
+            <div class="flex justify-between items-start mb-6">
+                <div>
+                    <h3 class="text-2xl font-black text-white mb-2" id="selectedPatientName">Loading...</h3>
+                    <p class="text-slate-400 text-sm font-bold">Patient ID: <span id="selectedPatientId" class="text-purple-400 font-mono">---</span></p>
+                </div>
+                <div class="text-right">
+                    <p class="text-[9px] font-black text-slate-500 uppercase tracking-widest mb-1">Current Status</p>
+                    <span id="progressionTrend" class="inline-block bg-slate-800 px-6 py-2 rounded-full text-xs font-black uppercase"></span>
+                </div>
+            </div>
+            <div class="grid grid-cols-3 gap-6">
+                <div>
+                    <p class="text-[9px] font-black text-slate-500 uppercase tracking-widest mb-2">Total Scans</p>
+                    <p class="text-2xl font-black text-white" id="totalScansCount">0</p>
+                </div>
+                <div>
+                    <p class="text-[9px] font-black text-slate-500 uppercase tracking-widest mb-2">Avg Interval</p>
+                    <p class="text-2xl font-black text-blue-400" id="avgScanInterval">0d</p>
+                </div>
+                <div>
+                    <p class="text-[9px] font-black text-slate-500 uppercase tracking-widest mb-2">Alert Level</p>
+                    <p class="text-2xl font-black" id="alertLevel">---</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Timeline Visualization -->
+        <div class="premium-panel p-10 rounded-3xl border border-white/5 bg-slate-950/20">
+            <h3 class="text-[10px] font-black uppercase text-blue-500 tracking-[0.3em] mb-8 flex items-center gap-2">
+                <i data-lucide="timeline"></i> Scan Timeline
+            </h3>
+            <div id="timelineContainer" class="relative">
+                <!-- Timeline will be dynamically generated -->
+            </div>
+        </div>
+
+        <!-- Diagnostic Trend Chart -->
+        <div class="premium-panel p-10 rounded-3xl border border-white/5 bg-slate-950/20">
+            <h3 class="text-[10px] font-black uppercase text-emerald-500 tracking-[0.3em] mb-8 flex items-center gap-2">
+                <i data-lucide="trending-up"></i> Confidence Progression
+            </h3>
+            <canvas id="confidenceChart" class="w-full" height="80"></canvas>
+        </div>
+
+        <!-- Detailed Scan History -->
+        <div class="premium-panel p-10 rounded-3xl border border-white/5 bg-slate-950/20">
+            <h3 class="text-[10px] font-black uppercase text-purple-500 tracking-[0.3em] mb-8 flex items-center gap-2">
+                <i data-lucide="list"></i> Detailed Scan History
+            </h3>
+            <div class="space-y-4" id="scanHistoryList">
+                <!-- Scan history will be populated here -->
+            </div>
+        </div>
+
+        <!-- Comparison Tool -->
+        <div class="premium-panel p-10 rounded-3xl border border-white/5 bg-slate-950/20">
+            <h3 class="text-[10px] font-black uppercase text-orange-500 tracking-[0.3em] mb-8 flex items-center gap-2">
+                <i data-lucide="git-compare"></i> Scan Comparison
+            </h3>
+            <div class="grid grid-cols-2 gap-6 mb-6">
+                <select id="compareScan1" class="w-full bg-slate-900 border border-white/5 px-6 py-4 rounded-2xl text-white outline-none text-sm">
+                    <option value="">-- Select First Scan --</option>
+                </select>
+                <select id="compareScan2" class="w-full bg-slate-900 border border-white/5 px-6 py-4 rounded-2xl text-white outline-none text-sm">
+                    <option value="">-- Select Second Scan --</option>
+                </select>
+            </div>
+            <button onclick="compareSelectedScans()" class="w-full bg-orange-600 hover:bg-orange-500 py-4 rounded-2xl font-black uppercase text-xs tracking-widest transition">
+                Generate Comparison Report
+            </button>
+            <div id="comparisonResult" class="hidden mt-8 p-6 bg-slate-900/50 rounded-2xl border border-orange-500/20">
+                <h4 class="text-sm font-black text-orange-400 mb-4 uppercase">Clinical Comparison</h4>
+                <div id="comparisonReport" class="text-slate-300 text-sm leading-relaxed"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Empty State -->
+    <div id="progressionEmptyState" class="premium-panel p-20 rounded-3xl text-center border border-dashed border-white/10">
+        <i data-lucide="database" class="w-16 h-16 text-slate-700 mx-auto mb-6"></i>
+        <p class="text-slate-500 font-bold text-lg mb-2">No Patient Selected</p>
+        <p class="text-slate-600 text-sm">Select a patient above to view progression analytics</p>
+    </div>
+
   </div>
+  
 </main>
 
 <script>
@@ -568,6 +717,325 @@ function exportRegistryCSV() {
     link.click();
     document.body.removeChild(link);
 }
+  let currentProgressionData = null;
+let progressionChart = null;
+
+// Load system-wide progression statistics
+async function refreshProgressionStats() {
+    const token = sessionStorage.getItem('authToken');
+    if (!token) return;
+
+    try {
+        const res = await fetch('https://retinal-pro.onrender.com/progression/stats', {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        const data = await res.json();
+
+        document.getElementById('totalPatientsCount').innerText = data.total_patients || 0;
+        document.getElementById('improvingCount').innerText = data.patient_status_distribution?.IMPROVING || 0;
+        document.getElementById('stableCount').innerText = data.patient_status_distribution?.STABLE || 0;
+        document.getElementById('deterioratingCount').innerText = data.patient_status_distribution?.DETERIORATING || 0;
+
+        // Populate patient selector
+        populatePatientSelector();
+    } catch (e) {
+        console.error('Stats error:', e);
+    }
+}
+
+// Populate patient dropdown from registry
+async function populatePatientSelector() {
+    const token = sessionStorage.getItem('authToken');
+    if (!token) return;
+
+    try {
+        const res = await fetch('https://retinal-pro.onrender.com/get_records', {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        const records = await res.json();
+
+        // Get unique patients
+        const uniquePatients = {};
+        records.forEach(r => {
+            const pid = r.id;
+            if (!uniquePatients[pid]) {
+                uniquePatients[pid] = { id: pid, name: r.name || 'Anonymous' };
+            }
+        });
+
+        const selector = document.getElementById('patientProgressionSelect');
+        selector.innerHTML = '<option value="">-- Select Patient --</option>';
+        
+        Object.values(uniquePatients).forEach(patient => {
+            const option = document.createElement('option');
+            option.value = patient.id;
+            option.textContent = `${patient.name} (${patient.id})`;
+            selector.appendChild(option);
+        });
+    } catch (e) {
+        console.error('Patient load error:', e);
+    }
+}
+
+// Load progression data for selected patient
+async function loadPatientProgression() {
+    const patientId = document.getElementById('patientProgressionSelect').value;
+    if (!patientId) {
+        document.getElementById('progressionContent').classList.add('hidden');
+        document.getElementById('progressionEmptyState').classList.remove('hidden');
+        return;
+    }
+
+    const token = sessionStorage.getItem('authToken');
+    document.getElementById('progressionEmptyState').classList.add('hidden');
+
+    try {
+        const res = await fetch(`https://retinal-pro.onrender.com/progression/${patientId}`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        const data = await res.json();
+
+        currentProgressionData = data;
+        renderProgressionView(data);
+        document.getElementById('progressionContent').classList.remove('hidden');
+    } catch (e) {
+        console.error('Progression load error:', e);
+        alert('Error loading progression data');
+    }
+}
+
+// Render complete progression view
+function renderProgressionView(data) {
+    const metrics = data.progression_metrics;
+    
+    // Update overview
+    document.getElementById('selectedPatientName').innerText = data.scan_history[0]?.diagnosis || 'Unknown';
+    document.getElementById('selectedPatientId').innerText = data.patient_id;
+    document.getElementById('totalScansCount').innerText = data.total_scans;
+    document.getElementById('avgScanInterval').innerText = `${metrics.scan_interval_days}d`;
+    
+    // Trend badge
+    const trendBadge = document.getElementById('progressionTrend');
+    const trendColors = {
+        'IMPROVING': 'bg-emerald-500 text-white',
+        'STABLE': 'bg-yellow-500 text-black',
+        'DETERIORATING': 'bg-red-500 text-white',
+        'VARIABLE': 'bg-purple-500 text-white'
+    };
+    trendBadge.className = `inline-block px-6 py-2 rounded-full text-xs font-black uppercase ${trendColors[metrics.trend] || 'bg-slate-500'}`;
+    trendBadge.innerText = metrics.trend;
+
+    // Alert level
+    const alertEl = document.getElementById('alertLevel');
+    const alertColors = {
+        'URGENT': 'text-red-500',
+        'CAUTION': 'text-yellow-500',
+        'MONITOR': 'text-blue-500',
+        'ROUTINE': 'text-emerald-500'
+    };
+    alertEl.className = `text-2xl font-black ${alertColors[metrics.alert_level] || 'text-slate-500'}`;
+    alertEl.innerText = metrics.alert_level;
+
+    // Render timeline
+    renderTimeline(data.scan_history);
+
+    // Render confidence chart
+    renderConfidenceChart(data.scan_history);
+
+    // Render detailed history
+    renderScanHistory(data.scan_history);
+
+    // Populate comparison dropdowns
+    populateComparisonSelectors(data.scan_history);
+
+    lucide.createIcons();
+}
+
+// Visual timeline renderer
+function renderTimeline(scans) {
+    const container = document.getElementById('timelineContainer');
+    container.innerHTML = '';
+
+    const diagnosisColors = {
+        'CNV': 'bg-red-500',
+        'DME': 'bg-orange-500',
+        'DRUSEN': 'bg-yellow-500',
+        'NORMAL': 'bg-emerald-500'
+    };
+
+    scans.forEach((scan, idx) => {
+        const date = new Date(scan.timestamp.seconds * 1000);
+        const formattedDate = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+
+        const timelineItem = `
+            <div class="flex gap-6 mb-8 group relative">
+                <div class="flex flex-col items-center">
+                    <div class="${diagnosisColors[scan.diagnosis] || 'bg-slate-500'} w-6 h-6 rounded-full shadow-lg group-hover:scale-125 transition"></div>
+                    ${idx < scans.length - 1 ? '<div class="w-0.5 h-20 bg-slate-800 mt-2"></div>' : ''}
+                </div>
+                <div class="flex-1 pb-8">
+                    <div class="flex justify-between items-start mb-3">
+                        <div>
+                            <h4 class="text-lg font-black text-white uppercase">${scan.diagnosis}</h4>
+                            <p class="text-xs text-slate-500 font-bold">${formattedDate}</p>
+                        </div>
+                        <span class="bg-slate-800 px-4 py-1 rounded-full text-xs font-black text-emerald-400">${scan.confidence}</span>
+                    </div>
+                    <p class="text-sm text-slate-400">Scan ID: <span class="font-mono text-purple-400">${scan.scan_id}</span></p>
+                </div>
+            </div>
+        `;
+        container.innerHTML += timelineItem;
+    });
+}
+
+// Confidence progression chart
+function renderConfidenceChart(scans) {
+    const canvas = document.getElementById('confidenceChart');
+    const ctx = canvas.getContext('2d');
+
+    // Destroy existing chart
+    if (progressionChart) {
+        progressionChart.destroy();
+    }
+
+    const labels = scans.map((s, i) => `Scan ${i + 1}`);
+    const confidenceData = scans.map(s => parseFloat(s.confidence) || 0);
+
+    // Simple line chart implementation
+    const maxVal = Math.max(...confidenceData);
+    const minVal = Math.min(...confidenceData);
+    const range = maxVal - minVal || 10;
+
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.strokeStyle = '#3b82f6';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+
+    const padding = 40;
+    const chartWidth = canvas.width - padding * 2;
+    const chartHeight = canvas.height - padding * 2;
+
+    confidenceData.forEach((val, i) => {
+        const x = padding + (i / (confidenceData.length - 1)) * chartWidth;
+        const y = canvas.height - padding - ((val - minVal) / range) * chartHeight;
+
+        if (i === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+
+        // Draw point
+        ctx.fillStyle = '#3b82f6';
+        ctx.beginPath();
+        ctx.arc(x, y, 5, 0, Math.PI * 2);
+        ctx.fill();
+    });
+
+    ctx.stroke();
+
+    // Store for future reference
+    progressionChart = { canvas, ctx };
+}
+
+// Detailed scan history list
+function renderScanHistory(scans) {
+    const container = document.getElementById('scanHistoryList');
+    container.innerHTML = scans.map(scan => {
+        const date = new Date(scan.timestamp.seconds * 1000);
+        const formattedDate = date.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+
+        return `
+            <div class="bg-slate-900/50 p-6 rounded-2xl border border-white/5 hover:border-blue-500/30 transition group">
+                <div class="flex justify-between items-start">
+                    <div>
+                        <h5 class="text-base font-black text-white mb-1 uppercase group-hover:text-blue-400 transition">${scan.diagnosis}</h5>
+                        <p class="text-xs text-slate-500 font-bold mb-3">${formattedDate}</p>
+                        <div class="flex gap-4 text-xs">
+                            <span class="text-slate-400">Confidence: <span class="text-emerald-400 font-black">${scan.confidence}</span></span>
+                            <span class="text-slate-400">Risk: <span class="text-orange-400 font-black">${scan.risk_level}</span></span>
+                        </div>
+                    </div>
+                    <span class="text-[9px] font-mono text-slate-600">${scan.scan_id.substring(0, 8)}...</span>
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+// Populate comparison selectors
+function populateComparisonSelectors(scans) {
+    const select1 = document.getElementById('compareScan1');
+    const select2 = document.getElementById('compareScan2');
+
+    const options = scans.map((scan, idx) => {
+        const date = new Date(scan.timestamp.seconds * 1000).toLocaleDateString();
+        return `<option value="${scan.scan_id}">Scan ${idx + 1} - ${scan.diagnosis} (${date})</option>`;
+    }).join('');
+
+    select1.innerHTML = '<option value="">-- Select First Scan --</option>' + options;
+    select2.innerHTML = '<option value="">-- Select Second Scan --</option>' + options;
+}
+
+// Compare two scans
+async function compareSelectedScans() {
+    const scan1 = document.getElementById('compareScan1').value;
+    const scan2 = document.getElementById('compareScan2').value;
+
+    if (!scan1 || !scan2) {
+        alert('Please select two scans to compare');
+        return;
+    }
+
+    if (scan1 === scan2) {
+        alert('Please select two different scans');
+        return;
+    }
+
+    const token = sessionStorage.getItem('authToken');
+    const patientId = currentProgressionData.patient_id;
+
+    try {
+        const res = await fetch(`https://retinal-pro.onrender.com/progression/compare/${patientId}`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`
+            },
+            body: JSON.stringify({ scan_id_1: scan1, scan_id_2: scan2 })
+        });
+
+        const data = await res.json();
+
+        document.getElementById('comparisonResult').classList.remove('hidden');
+        document.getElementById('comparisonReport').innerHTML = data.comparison_report.replace(/\n/g, '<br>');
+    } catch (e) {
+        console.error('Comparison error:', e);
+        alert('Error comparing scans');
+    }
+}
+
+// Search patients in progression view
+function searchProgressionPatients() {
+    const query = document.getElementById('progressionPatientSearch').value.toLowerCase();
+    const selector = document.getElementById('patientProgressionSelect');
+    
+    Array.from(selector.options).forEach(option => {
+        if (option.value === '') return;
+        const text = option.textContent.toLowerCase();
+        option.style.display = text.includes(query) ? '' : 'none';
+    });
+}
+
+// Initialize on progression view load
+document.addEventListener('DOMContentLoaded', () => {
+    // Auto-refresh stats when progression view is shown
+    const originalShowView = window.showView;
+    window.showView = function(v, el) {
+        originalShowView(v, el);
+        if (v === 'progression') {
+            refreshProgressionStats();
+        }
+    };
+});
 </script>
 
 </body>
