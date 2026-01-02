@@ -748,6 +748,7 @@ async function refreshProgressionStats() {
 // Populate patient dropdown from registry
 // Populate patient dropdown from registry
 // Populate patient dropdown from registry - groups by patient_id
+// Populate patient dropdown from registry - groups by patient_id
 async function populatePatientSelector() {
     const token = sessionStorage.getItem('authToken');
     if (!token) return;
@@ -758,19 +759,22 @@ async function populatePatientSelector() {
         });
         const records = await res.json();
 
-        // Group records by patient_id to find patients with multiple scans
+        // Group records by patient_id field (multiple scans can have same patient_id)
         const patientGroups = {};
         records.forEach(record => {
-            const pid = record.id; // This is the patient_id from the document
+            const pid = record.patient_id || record.id; // Use patient_id field, fallback to document ID
+            
             if (!patientGroups[pid]) {
                 patientGroups[pid] = {
                     patient_id: pid,
-                    name: record.name,
-                    scan_count: 0,
+                    name: record.name || 'Anonymous',
+                    scans: [],
                     latest_diagnosis: record.diagnosis
                 };
             }
-            patientGroups[pid].scan_count++;
+            patientGroups[pid].scans.push(record);
+            // Keep updating to get the most recent diagnosis (records are ordered by timestamp DESC)
+            patientGroups[pid].latest_diagnosis = record.diagnosis;
         });
 
         // Populate selector with unique patients
@@ -780,7 +784,8 @@ async function populatePatientSelector() {
         Object.values(patientGroups).forEach(patient => {
             const option = document.createElement('option');
             option.value = patient.patient_id;
-            option.textContent = `${patient.name || 'Anonymous'} (${patient.scan_count} scan${patient.scan_count > 1 ? 's' : ''}) - ${patient.latest_diagnosis}`;
+            const scanCount = patient.scans.length;
+            option.textContent = `${patient.name} (${scanCount} scan${scanCount > 1 ? 's' : ''}) - ${patient.latest_diagnosis}`;
             selector.appendChild(option);
         });
         
@@ -790,7 +795,6 @@ async function populatePatientSelector() {
         alert('Error loading patient list. Check console for details.');
     }
 }
-
 // Load progression data for selected patient
 async function loadPatientProgression() {
     const patientId = document.getElementById('patientProgressionSelect').value;
