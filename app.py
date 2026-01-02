@@ -48,7 +48,7 @@ if GENAI_NEW:
     gemini_model = None
 else:
     genai.configure(api_key=os.environ.get("GEMINI_API_KEY"))
-    gemini_model = genai.GenerativeModel('gemini-2.5-flash')
+    gemini_model = genai.GenerativeModel('gemini-2.0-flash-exp')
 
 GMAIL_USER = os.environ.get("GMAIL_USER")
 GMAIL_APP_PASSWORD = os.environ.get("GMAIL_APP_PASSWORD")
@@ -63,6 +63,14 @@ db = firestore.client()
 MODEL_PATH = os.environ.get("MODEL_PATH", "models/retinal_cnn_model.h5")
 CLASS_LABELS = ['CNV', 'DME', 'DRUSEN', 'NORMAL']
 INPUT_SHAPE = (224, 224, 3)
+
+# Disease severity ranking for progression analysis
+SEVERITY_RANKING = {
+    'NORMAL': 0,
+    'DRUSEN': 1,
+    'DME': 2,
+    'CNV': 3
+}
 
 # Model Loading with Environment-Aware Strategy
 cnn_model = None
@@ -292,7 +300,7 @@ def run_edge_inference(preprocessed, filename):
         'probabilities': probabilities
     }
 
-# 5. PREDICTION ENDPOINT
+# 5. PREDICTION ENDPOINT (ENHANCED WITH PROGRESSION TRACKING)
 @app.route('/predict', methods=['POST'])
 def predict():
     file = request.files.get('image')
@@ -335,9 +343,14 @@ def predict():
         print(f"Gemini error: {e}")
         report = f"OCT analysis indicates {label}. Clinical review recommended. Standard monitoring protocols apply."
 
-    # Store in Firebase Registry
+    # Generate unique scan ID for this specific scan
+    scan_id = f"SCAN-{int(time.time())}-{np.random.randint(1000, 9999)}"
+
+    # Store in Firebase Registry with scan tracking
     try:
-        db.collection("patient_records").document(p_id).set({
+        scan_data = {
+            "scan_id": scan_id,
+            "patient_id": p_id,
             "patient_name": p_name,
             "patient_email": p_email,
             "diagnosis": label,
@@ -353,7 +366,11 @@ def predict():
                 "class_probabilities": cnn_result["class_probabilities"]
             },
             "image_metadata": cnn_result["image_metadata"]
-        })
+        }
+        
+        # Store each scan as a separate document
+        db.collection("patient_records").add(scan_data)
+        
     except Exception as e:
         print(f"Firebase error: {e}")
         return jsonify({"error": f"Database error: {str(e)}"}), 500
@@ -363,7 +380,8 @@ def predict():
         "confidence": confidence,
         "risk_level": risk_level,
         "report": report,
-        "record_id": p_id,
+        "scan_id": scan_id,
+        "patient_id": p_id,
         "processing_time_ms": cnn_result["inference_time_ms"],
         "class_probabilities": cnn_result["class_probabilities"],
         "metadata": cnn_result["image_metadata"]
@@ -379,6 +397,8 @@ def get_records():
             data = d.to_dict()
             records.append({
                 "id": d.id,
+                "scan_id": data.get("scan_id"),
+                "patient_id": data.get("patient_id"),
                 "name": data.get("patient_name"),
                 "diagnosis": data.get("diagnosis"),
                 "confidence": data.get("confidence"),
@@ -392,7 +412,222 @@ def get_records():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-# 7. AUTOMATED EMAIL DISPATCH
+# 7. PROGRESSION ANALYTICS ENDPOINTS
+
+@app.route('/progression/<patient_id>', methods=['GET'])
+def get_patient_progression(patient_id):
+    """
+    Retrieves complete scan history for a patient with progression analysis
+    """
+    try:
+        # Fetch all scans for this patient
+        scans_ref = db.collection("patient_records").where("patient_id", "==", patient_id).order_by("timestamp").stream()
+        
+        scans = []
+        for doc in scans_ref:
+            data = doc.to_dict()
+            scans.append({
+                "scan_id": data.get("scan_id"),
+                "diagnosis": data.get("diagnosis"),
+                "confidence": data.get("confidence"),
+                "risk_level": data.get("risk_level"),
+                "timestamp": data.get("timestamp"),
+                "report": data.get("report")
+            })
+        
+        if len(scans) == 0:
+            return jsonify({"error": "No scans found for this patient"}), 404
+        
+        # Analyze progression
+        progression_metrics = analyze_disease_progression(scans)
+        
+        return jsonify({
+            "patient_id": patient_id,
+            "total_scans": len(scans),
+            "scan_history": scans,
+            "progression_metrics": progression_metrics
+        }), 200
+        
+    except Exception as e:
+        print(f"Progression retrieval error: {e}")
+        return jsonify({"error": str(e)}), 500
+
+def analyze_disease_progression(scans):
+    """
+    Analyzes disease progression trends from scan history
+    """
+    if len(scans) < 2:
+        return {
+            "trend": "INSUFFICIENT_DATA",
+            "alert_level": "MONITOR",
+            "scan_interval_days": 0,
+            "severity_change": "N/A"
+        }
+    
+    # Calculate time intervals
+    timestamps = [scan["timestamp"] for scan in scans]
+    time_diffs = []
+    for i in range(1, len(timestamps)):
+        diff = (timestamps[i].timestamp() - timestamps[i-1].timestamp()) / (24 * 3600)
+        time_diffs.append(diff)
+    avg_interval = np.mean(time_diffs) if time_diffs else 0
+    
+    # Analyze severity progression
+    severity_scores = [SEVERITY_RANKING.get(scan["diagnosis"], 0) for scan in scans]
+    
+    # Determine trend
+    if len(severity_scores) >= 3:
+        recent_trend = severity_scores[-3:]
+        if all(recent_trend[i] <= recent_trend[i+1] for i in range(len(recent_trend)-1)):
+            trend = "DETERIORATING"
+        elif all(recent_trend[i] >= recent_trend[i+1] for i in range(len(recent_trend)-1)):
+            trend = "IMPROVING"
+        elif severity_scores[-1] == severity_scores[-2] == severity_scores[-3]:
+            trend = "STABLE"
+        else:
+            trend = "VARIABLE"
+    else:
+        if severity_scores[-1] > severity_scores[0]:
+            trend = "DETERIORATING"
+        elif severity_scores[-1] < severity_scores[0]:
+            trend = "IMPROVING"
+        else:
+            trend = "STABLE"
+    
+    # Determine alert level
+    latest_severity = severity_scores[-1]
+    if trend == "DETERIORATING" and latest_severity >= 2:
+        alert_level = "URGENT"
+    elif trend == "DETERIORATING":
+        alert_level = "CAUTION"
+    elif trend == "STABLE" and latest_severity >= 2:
+        alert_level = "MONITOR"
+    else:
+        alert_level = "ROUTINE"
+    
+    # Severity change
+    severity_change = severity_scores[-1] - severity_scores[0]
+    
+    return {
+        "trend": trend,
+        "alert_level": alert_level,
+        "scan_interval_days": round(avg_interval, 1),
+        "severity_change": severity_change,
+        "severity_progression": severity_scores,
+        "diagnoses_timeline": [scan["diagnosis"] for scan in scans]
+    }
+
+@app.route('/progression/stats', methods=['GET'])
+def get_progression_stats():
+    """
+    Returns system-wide progression statistics
+    """
+    try:
+        # Get all patient IDs
+        all_docs = db.collection("patient_records").stream()
+        patient_ids = set()
+        for doc in all_docs:
+            data = doc.to_dict()
+            patient_ids.add(data.get("patient_id"))
+        
+        # Analyze each patient
+        stats = {
+            "total_patients": len(patient_ids),
+            "patient_status_distribution": {
+                "IMPROVING": 0,
+                "STABLE": 0,
+                "DETERIORATING": 0,
+                "VARIABLE": 0
+            }
+        }
+        
+        for pid in patient_ids:
+            scans_ref = db.collection("patient_records").where("patient_id", "==", pid).order_by("timestamp").stream()
+            scans = [doc.to_dict() for doc in scans_ref]
+            
+            if len(scans) >= 2:
+                metrics = analyze_disease_progression(scans)
+                trend = metrics.get("trend", "VARIABLE")
+                if trend in stats["patient_status_distribution"]:
+                    stats["patient_status_distribution"][trend] += 1
+        
+        return jsonify(stats), 200
+        
+    except Exception as e:
+        print(f"Stats error: {e}")
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/progression/compare/<patient_id>', methods=['POST'])
+def compare_scans(patient_id):
+    """
+    Compares two specific scans for detailed progression analysis
+    """
+    data = request.json
+    scan_id_1 = data.get('scan_id_1')
+    scan_id_2 = data.get('scan_id_2')
+    
+    try:
+        # Fetch both scans
+        scan1_ref = db.collection("patient_records").where("scan_id", "==", scan_id_1).limit(1).stream()
+        scan2_ref = db.collection("patient_records").where("scan_id", "==", scan_id_2).limit(1).stream()
+        
+        scan1_data = None
+        scan2_data = None
+        
+        for doc in scan1_ref:
+            scan1_data = doc.to_dict()
+        for doc in scan2_ref:
+            scan2_data = doc.to_dict()
+        
+        if not scan1_data or not scan2_data:
+            return jsonify({"error": "One or both scans not found"}), 404
+        
+        # Generate AI comparison report
+        prompt = f"""Compare these two retinal scans for the same patient:
+
+Scan 1: {scan1_data['diagnosis']} ({scan1_data['confidence']} confidence)
+Date: {scan1_data['timestamp']}
+
+Scan 2: {scan2_data['diagnosis']} ({scan2_data['confidence']} confidence)
+Date: {scan2_data['timestamp']}
+
+Provide a concise clinical comparison (3-4 sentences) covering:
+1. Disease progression status
+2. Clinical significance of changes
+3. Recommended action"""
+        
+        try:
+            if GENAI_NEW:
+                response = client.models.generate_content(
+                    model='gemini-2.0-flash-exp',
+                    contents=prompt
+                )
+                comparison_report = response.text
+            else:
+                comparison_report = gemini_model.generate_content(prompt).text
+        except Exception as e:
+            print(f"Gemini comparison error: {e}")
+            comparison_report = "Automated comparison unavailable. Manual review recommended."
+        
+        return jsonify({
+            "scan_1": {
+                "diagnosis": scan1_data['diagnosis'],
+                "confidence": scan1_data['confidence'],
+                "date": scan1_data['timestamp'].isoformat() if hasattr(scan1_data['timestamp'], 'isoformat') else str(scan1_data['timestamp'])
+            },
+            "scan_2": {
+                "diagnosis": scan2_data['diagnosis'],
+                "confidence": scan2_data['confidence'],
+                "date": scan2_data['timestamp'].isoformat() if hasattr(scan2_data['timestamp'], 'isoformat') else str(scan2_data['timestamp'])
+            },
+            "comparison_report": comparison_report
+        }), 200
+        
+    except Exception as e:
+        print(f"Comparison error: {e}")
+        return jsonify({"error": str(e)}), 500
+
+# 8. AUTOMATED EMAIL DISPATCH
 from sendgrid import SendGridAPIClient
 from sendgrid.helpers.mail import Mail
 
@@ -426,7 +661,7 @@ def send_patient_email():
     """
 
     message = Mail(
-        from_email='taneeshsawant05@gmail.com',  # Must be verified in SendGrid
+        from_email='taneeshsawant05@gmail.com',
         to_emails=recipient,
         subject=f'RetinalPro: Clinical Update for {name}',
         plain_text_content=body
@@ -445,7 +680,7 @@ def send_patient_email():
         print(f"SendGrid error: {e}")
         return jsonify({"error": str(e)}), 500
 
-# 8. AI CHAT ASSISTANT
+# 9. AI CHAT ASSISTANT
 @app.route('/chat', methods=['POST'])
 def chat():
     data = request.json
@@ -461,7 +696,7 @@ def chat():
         
         if GENAI_NEW:
             response = client.models.generate_content(
-                model='gemini-2.5-flash',
+                model='gemini-2.0-flash-exp',
                 contents=prompt
             )
             return jsonify({"reply": response.text}), 200
@@ -472,7 +707,7 @@ def chat():
         print(f"Chat error: {e}")
         return jsonify({"reply": "AI assistant temporarily unavailable. Please try again."}), 500
 
-# 9. HEALTH CHECK
+# 10. HEALTH CHECK
 @app.route('/health', methods=['GET'])
 def health():
     return jsonify({
@@ -480,10 +715,11 @@ def health():
         "registry": "connected",
         "smtp": bool(GMAIL_APP_PASSWORD),
         "ai_model": "active",
-        "cnn_status": "full_model" if MODEL_LOADED else "edge_inference"
+        "cnn_status": "full_model" if MODEL_LOADED else "edge_inference",
+        "progression_analytics": "enabled"
     }), 200
 
-# 10. MODEL INFO ENDPOINT
+# 11. MODEL INFO ENDPOINT
 @app.route('/model_info', methods=['GET'])
 def model_info():
     """
@@ -495,7 +731,8 @@ def model_info():
         "class_labels": CLASS_LABELS,
         "num_classes": len(CLASS_LABELS),
         "preprocessing": "Normalization + Resizing",
-        "deployment_mode": "full_model" if MODEL_LOADED else "edge_inference"
+        "deployment_mode": "full_model" if MODEL_LOADED else "edge_inference",
+        "progression_tracking": "enabled"
     }
     
     if MODEL_LOADED and cnn_model is not None:
