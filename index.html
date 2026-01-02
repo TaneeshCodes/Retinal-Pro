@@ -747,6 +747,7 @@ async function refreshProgressionStats() {
 
 // Populate patient dropdown from registry
 // Populate patient dropdown from registry
+// Populate patient dropdown from registry - groups by patient_id
 async function populatePatientSelector() {
     const token = sessionStorage.getItem('authToken');
     if (!token) return;
@@ -757,18 +758,33 @@ async function populatePatientSelector() {
         });
         const records = await res.json();
 
-        // Use the document IDs directly as patient IDs
+        // Group records by patient_id to find patients with multiple scans
+        const patientGroups = {};
+        records.forEach(record => {
+            const pid = record.id; // This is the patient_id from the document
+            if (!patientGroups[pid]) {
+                patientGroups[pid] = {
+                    patient_id: pid,
+                    name: record.name,
+                    scan_count: 0,
+                    latest_diagnosis: record.diagnosis
+                };
+            }
+            patientGroups[pid].scan_count++;
+        });
+
+        // Populate selector with unique patients
         const selector = document.getElementById('patientProgressionSelect');
         selector.innerHTML = '<option value="">-- Select Patient --</option>';
         
-        records.forEach(record => {
+        Object.values(patientGroups).forEach(patient => {
             const option = document.createElement('option');
-            option.value = record.id; // Use the document ID
-            option.textContent = `${record.name || 'Anonymous'} - ${record.diagnosis} (${record.id})`;
+            option.value = patient.patient_id;
+            option.textContent = `${patient.name || 'Anonymous'} (${patient.scan_count} scan${patient.scan_count > 1 ? 's' : ''}) - ${patient.latest_diagnosis}`;
             selector.appendChild(option);
         });
         
-        console.log(`Loaded ${records.length} patients into selector`);
+        console.log(`Loaded ${Object.keys(patientGroups).length} unique patients`);
     } catch (e) {
         console.error('Patient load error:', e);
         alert('Error loading patient list. Check console for details.');
