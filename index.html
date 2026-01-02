@@ -746,6 +746,7 @@ async function refreshProgressionStats() {
 }
 
 // Populate patient dropdown from registry
+// Populate patient dropdown from registry
 async function populatePatientSelector() {
     const token = sessionStorage.getItem('authToken');
     if (!token) return;
@@ -756,26 +757,21 @@ async function populatePatientSelector() {
         });
         const records = await res.json();
 
-        // Get unique patients
-        const uniquePatients = {};
-        records.forEach(r => {
-            const pid = r.id;
-            if (!uniquePatients[pid]) {
-                uniquePatients[pid] = { id: pid, name: r.name || 'Anonymous' };
-            }
-        });
-
+        // Use the document IDs directly as patient IDs
         const selector = document.getElementById('patientProgressionSelect');
         selector.innerHTML = '<option value="">-- Select Patient --</option>';
         
-        Object.values(uniquePatients).forEach(patient => {
+        records.forEach(record => {
             const option = document.createElement('option');
-            option.value = patient.id;
-            option.textContent = `${patient.name} (${patient.id})`;
+            option.value = record.id; // Use the document ID
+            option.textContent = `${record.name || 'Anonymous'} - ${record.diagnosis} (${record.id})`;
             selector.appendChild(option);
         });
+        
+        console.log(`Loaded ${records.length} patients into selector`);
     } catch (e) {
         console.error('Patient load error:', e);
+        alert('Error loading patient list. Check console for details.');
     }
 }
 
