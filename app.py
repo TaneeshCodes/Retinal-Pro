@@ -526,30 +526,28 @@ def get_patient_progression(patient_id):
     Returns chronological record of diagnoses with confidence metrics
     """
     try:
-        # Query all records for this patient, ordered by timestamp
-        docs = db.collection("patient_records")\
-                 .where("patient_id", "==", patient_id)\
-                 .order_by("timestamp", direction=firestore.Query.ASCENDING)\
-                 .stream()
+        # Query: Get the specific document by its ID
+        doc = db.collection("patient_records").document(patient_id).get()
         
-        progression_data = []
-        for doc in docs:
-            data = doc.to_dict()
-            progression_data.append({
-                "scan_id": doc.id,
-                "timestamp": data.get("timestamp"),
-                "diagnosis": data.get("diagnosis"),
-                "confidence": data.get("confidence"),
-                "raw_confidence": data.get("raw_confidence", 0),
-                "risk_level": data.get("risk_level"),
-                "class_probabilities": data.get("model_metadata", {}).get("class_probabilities", {}),
-                "inference_time": data.get("model_metadata", {}).get("inference_time_ms", 0)
-            })
+        if not doc.exists:
+            return jsonify({"error": "Patient record not found"}), 404
         
-        if not progression_data:
-            return jsonify({"error": "No progression data found for this patient"}), 404
+        # For now, return single scan as progression data
+        # (This will work with your current data structure)
+        data = doc.to_dict()
         
-        # Calculate progression metrics
+        progression_data = [{
+            "scan_id": doc.id,
+            "timestamp": data.get("timestamp"),
+            "diagnosis": data.get("diagnosis"),
+            "confidence": data.get("confidence"),
+            "raw_confidence": float(data.get("confidence", "0").replace("%", "")),
+            "risk_level": data.get("risk_level"),
+            "class_probabilities": data.get("model_metadata", {}).get("class_probabilities", {}),
+            "inference_time": data.get("model_metadata", {}).get("inference_time_ms", 0)
+        }]
+        
+        # Calculate progression metrics (will show INSUFFICIENT_DATA for single scan)
         metrics = calculate_progression_metrics(progression_data)
         
         return jsonify({
@@ -561,7 +559,7 @@ def get_patient_progression(patient_id):
         
     except Exception as e:
         print(f"Progression retrieval error: {e}")
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": str(e)}), 500500
 
 
 def calculate_progression_metrics(progression_data):
